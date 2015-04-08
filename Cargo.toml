@@ -4,12 +4,8 @@ name = "sc"
 version = "0.0.1"
 authors = ["Caleb Tennis <caleb.tennis@gmail.com>"]
 
-[dependencies]
-#regex = "0.1.8"
-#regex_macros = "0.1.2"
-
 [dependencies.flate2]
 git = "https://github.com/alexcrichton/flate2-rs"
 
 [dependencies]
-rustc-serialize = "0.2"
+rustc-serialize = "0.3"

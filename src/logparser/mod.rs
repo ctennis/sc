@@ -1,8 +1,10 @@
-use std::old_io::{BufferedReader, File};
+use std::io::{BufReader,BufRead};
 use std::fmt;
+use std::fs::File;
 use std::collections::HashMap;
-use std::old_path::Path;
+use std::path::PathBuf;
 use std::str::FromStr;
+use core::str::StrExt;
 
 #[derive(Debug,Clone)]
 enum ServerType {
@@ -65,7 +67,7 @@ impl HTTPReq for ProxyReq {
 
 impl fmt::Display for Transaction {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}\n", self.txid.as_slice()) 
+        write!(f, "{}\n", self.txid) 
     }
 }
 
@@ -171,13 +173,13 @@ impl LogParse for HandoffEntry {
 }
 
 fn parse_file(filename: &str) -> Vec<String> {
-    let path = Path::new(filename);
-    let open_file = File::open(&path);
+    let path = PathBuf::from(filename);
+
     let mut xs: Vec<String> = Vec::new();
-    match open_file {
-        Ok(_) => {
-            let mut file = BufferedReader::new(open_file);
-            for line in file.lines() {
+    match File::open(path) {
+        Ok(f) => {
+            let reader = BufReader::new(&f);
+            for line in reader.lines() {
                 match line {
                     Ok(x) => {
                         xs.push(x)
@@ -206,7 +208,10 @@ fn parse_transactions<T: LogParse>(e: &mut Vec<LogLine>) -> HashMap<String, Vec<
                 if !tmap.contains_key(&txid) {
                     tmap.insert(txid.clone(), Vec::new());
                 }
-                tmap[txid].push(ee);
+                match tmap.get_mut(&txid) {
+                    Some(tx) => { tx.push(ee); }
+                    None => { }
+                }
             }
             None => {
                 lines_to_return.push(entry);

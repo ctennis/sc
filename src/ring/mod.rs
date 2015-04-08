@@ -1,6 +1,7 @@
-extern crate flate2;
-
-use std::old_io::{BufferedReader, File};
+use std::fs::File;
+use std::path::PathBuf;
+use flate2::read::GzDecoder;
+use std::io::Read;
 
 //{"device": "d0", "id": 0, "ip": "10.149.30.7", "port": 6000, "region": 1, "replication_ip": "10.149.30.7", "replication_port": 6003, "weight": 3000.592982016, "zone": 3},
 
@@ -100,14 +101,15 @@ impl Ring {
 
 fn decode_ring_file(filename: &str) -> Option<(RingData, Vec<Vec<u16>>)>
 {
-    let file = File::open(&Path::new(filename));
-    let reader = BufferedReader::new(file);
-    let mut d = flate2::reader::GzDecoder::new(reader);
+    let path = PathBuf::from(filename);
+    let file = File::open(path).unwrap();
+    let mut d = GzDecoder::new(file).unwrap();
 
-    // First four bytes should be "RING"    
-    match d.read_exact(4) {
-        Ok(v) => {
-            if v != [82u8, 49u8, 78u8, 71u8] {
+    // First four bytes should be "RING"
+    let mut ring_header: [u8; 4] = [0,0,0,0];
+    match d.read(&mut ring_header) {
+        Ok(_) => {
+            if ring_header != [82u8, 49u8, 78u8, 71u8] {
                 println!("Don't got it");
                 return None;
             }
@@ -116,9 +118,10 @@ fn decode_ring_file(filename: &str) -> Option<(RingData, Vec<Vec<u16>>)>
     }
     
     // Next two bytes should be version 1
-    match d.read_exact(2) {
-        Ok(v) => {
-            if v != [0u8, 1u8] {
+    let mut ring_version: [u8; 2] = [0,0];
+    match d.read(&mut ring_version) {
+        Ok(2) => {
+            if ring_version != [0u8, 1u8] {
                 println!("Unknown version");
                 return None;
             }
@@ -126,32 +129,33 @@ fn decode_ring_file(filename: &str) -> Option<(RingData, Vec<Vec<u16>>)>
         _ => { }
     }
     
-    let json_size: u32 =
-    match d.read_be_u32() {
-        Ok(v) => {
-            v
+    let mut json_size_bytes: [u8; 4] = [0,0,0,0];
+
+    let json_size = match d.read(&mut json_size_bytes) {
+        Ok(4) => {
+            json_size_bytes[3] as u32 +
+            ((json_size_bytes[2] as u32) * 256) +
+            ((json_size_bytes[1] as u32) * 65536) +
+            ((json_size_bytes[0] as u32) * 16777216);
         }
-        _ => { 0 }
+        _ => { 0 as u32; }
     };
     
-    let ret = 
-    match d.read_exact(json_size as usize) {
-        Ok(v) => {
-            String::from_utf8(v)
-        }
-        _ => { String::from_utf8(Vec::new()) }
-    };
+    // TODO: compare to json_size..
+    let mut data_as_string: String = String::new();
     
-    let ret2 =
-    match ret {
-        Ok(s) => { 
-            match super::rustc_serialize::json::decode::<RingData>(&s) {
+    let ret2 = match d.read_to_string(&mut data_as_string) {
+        Ok(json_size) => {
+            match super::rustc_serialize::json::decode::<RingData>(&mut data_as_string) {
                 Ok(s) => { Some(s) }
                 _ => { None }
             }
-        }   
-        _ => { None }
+        }
+        _ => { panic!("AHHH!") }
     };
+    
+  
+
 
     let fv =
     match ret2 {
@@ -166,8 +170,11 @@ fn decode_ring_file(filename: &str) -> Option<(RingData, Vec<Vec<u16>>)>
     for _ in (0u8..fv.replica_count) {
         let mut parts: Vec<u16> = Vec::new();
         for _ in (0u32..partition_count) {
-            match d.read_le_u16() {
-                Ok(b) => { parts.push(b); }
+            let mut le16: [u8; 2] = [0,0];
+            match d.read(&mut le16) {
+                Ok(2) => { 
+                    let pval: u16 = ((le16[0] as u16) * 256) + (le16[1] as u16);
+                    parts.push(pval); }
                 _ => { }
             }
         }

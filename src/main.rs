@@ -1,8 +1,9 @@
-#![feature(old_path)]
-#![feature(old_io)]
 #![feature(collections)]
+#![feature(core)]
 
-extern crate "rustc-serialize" as rustc_serialize;
+extern crate rustc_serialize;
+extern crate flate2;
+extern crate core;
 
 pub mod logparser;
 pub mod ring;
